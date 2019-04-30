@@ -1,0 +1,893 @@
+---
+title:  |   
+  | Using hierarchical joint models to detect reproductive interactions in plant communities: 
+  | Plot-level visitation data
+author: "Øystein H. Opedal & Stein Joar Hegland"
+date: "30 April 2019"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(Hmsc)
+library(corrplot)
+library(knitr)
+```
+
+Contact: oystein.opedal@helsinki.fi
+
+# Introduction
+Here, we demonstrate how to set up a HMSC analysis of data on bumblebee visitation to 9 plant species cooccurring on 20 plots, collected during 176 10-min censuses. Data are from Hegland et al. 2009 (Ecological Research). A summary of these results are reported in Opedal & Hegland 2019 (in prep.). 
+
+For technical details about the HMSC model, see Ovaskainen et al. 2017 (Ecology Letters) and Tikhonov et al. 2019 (bioRxiv).
+
+We will fit four different models, which will allow us to assess different aspects of potential reproductive interactions.
+
+# Model 1: Latent variables and environmental covariates only
+
+We start by fitting a model with temperature as a single environmental covariate, which allows assessing raw associations among species after controlling for effects of temperature on insect activity.
+
+In the HMSC model, we include in the response matrix (**Y**) the number of pollinator visits to each species, with `NA` for species not flowering in the focal plot during a census. The number of pollinator visits are log(*x*+1)-transformed to place the response variables on a proportional scale and to reduce the leverage of large values.
+
+## Model setup and MCMC sampling
+
+### Load packages and read data files
+
+```{r I, message=F, warning=F, cache=T}
+library(Hmsc)
+library(corrplot)
+
+Y = read.csv("model1/Y1.csv")
+XData = read.csv("model1/XData1.csv")
+studyDesign = read.csv("model1/studyDesign1.csv")
+studyDesign$plot = as.factor(studyDesign$plot)
+```
+
+### Define HMSC random levels
+
+HMSC handles an arbitrary number of random factors represented by latent variables. Here, we set two random levels, `rL1` for the plots, and `rL2` for the sampling units (censuses).
+
+```{r II, message=F, warning=F}
+head(studyDesign)
+
+rL1 = HmscRandomLevel(units = unique(studyDesign[,1]))
+rL2 = HmscRandomLevel(units = unique(studyDesign[,2]))
+```
+
+### Set model formula for covariates
+
+The regression formula for the covariates is specified using standard `R` formula syntax, and can include linear terms, polynomials, and interactions.
+
+```{r III}
+XFormula = ~ poly(Temp, degree=2, raw=TRUE)
+```
+
+### Set up the HMSC model
+
+In this step we also set the error distribution of the model, here Gaussian (`distr="normal"`)
+
+```{r IV}
+m = Hmsc(Y = as.matrix(log(Y+1)), XData = XData,  XFormula = XFormula,
+         distr="normal", studyDesign=studyDesign, ranLevels = list(plot=rL1, su=rL2))
+```
+
+### Run MCMC and save the model object
+
+As with all MCMC-based Bayesian analyses, the posterior needs to be sampled until convergence. A good strategy is to start with a small number of iterations, and then increase the number of iterations until the results converge. We run 2 replicate MCMC chains to assess whether these converge. Because the sampling may take a long time, it is always advisable to save the model object including the posterior distribution to a local file.
+
+```{r V, eval=F}
+thin = 200
+samples = 1000
+nChains = 2
+adaptNf = ceiling(0.4*samples*thin)
+transient = ceiling(0.5*samples*thin)
+
+a = Sys.time()
+m = sampleMcmc(m, samples = samples, thin = thin,
+               adaptNf = rep(adaptNf, m$nr),
+               transient = transient,
+               nChains = nChains, nParallel = 1)
+Sys.time() - a
+
+save(m, file = "model1/mod1_thin200_samples1000_chains2.RData")
+```
+
+## Evaluating chain convergence and model fit
+
+After running the MCMC sampling scheme, we need to evaluate whether the chains converged, so that the results can be trusted.
+
+### Load the model object
+
+```{r VI, eval=T}
+load("model1/mod1_thin200_samples1000_chains2.RData")
+```
+
+### Compute effective sample sizes and potential scale reduction factors
+
+The effective sample sizes of the beta (regression coefficients) and omega (residual covariances) parameters are (in most cases) close to the expected (2000 samples), indicating adequate chain mixing. The potential scale reduction factors are all <1.1, indicating convergence of the two independent chains.
+
+```{r VII, eval=T, cache=T}
+post = convertToCodaObject(m)
+
+esBeta = effectiveSize(post$Beta)
+summary(esBeta)
+
+psrfBeta = gelman.diag(post$Beta)
+summary(psrfBeta$psrf)
+
+esOmega = effectiveSize(post$Omega[[1]])
+summary(esOmega)
+```
+
+### Write posterior trace plots to pdf
+
+Because the HMSC model includes many parameters, it is advisable to write the posterior trace plots to a pdf file rather then plotting them directly within `R`.
+
+```{r VIII, eval=T, cache=T, message=F, warning=F, results="hide"}
+pdf("model1/posterior_plots/BetaPost.pdf")
+plot(post$Beta)
+dev.off()
+
+pdf("model1/posterior_plots/OmegaPost.pdf")
+plot(post$Omega[[1]])
+plot(post$Omega[[2]])
+dev.off()
+```
+
+## Extract and assess parameter estimates
+
+### Compute predicted values
+
+```{r IX, eval=T, cache=T}
+predY = computePredictedValues(m)
+```
+
+### Evaluate model fit
+
+We can evaluate the explanatory power of the model by computing r^2^ values for each species.
+
+```{r X,  eval=T, cache=T}
+MF = evaluateModelFit(m, predY)
+round(MF$R2, 2)
+round(mean(MF$R2), 2)
+```
+
+### Compute and plot variance partitioning
+
+HMSC comes with tools for performing variance component analyses, i.e. partitioning the explained variance into components related to each random effect and each (group of) fixed effect(s).
+
+```{r XI, eval=T, cache=T, message=F, warning=F, fig.cap="\\label{fig: XI} Variance partitioning for each species for Model 1"}
+groups = c(1,1,1)
+groupnames = "Temp"
+VP = computeVariancePartitioning(m, groups, groupnames)
+
+names = gsub("_", " ", colnames(m$Y))
+
+outvals = VP$vals
+ng = dim(outvals)[1]
+leg = groupnames
+for (r in 1:m$nr){leg = c(leg, paste("Random: ", m$rLNames[r], sep = ""))}
+means = round(100 * rowMeans(outvals), 1)
+for (i in 1:ng){leg[i] = paste(leg[i], " (mean = ", toString(means[i]), ")", sep = "")}
+
+par(mar = c(8,4,2,11), xpd=T)
+barplot(outvals, xlab = "", ylab = "Variance proportion",axisnames=F,
+        args.legend=list(x=17.5,y=1, bty="n", cex=.8), 
+        las = 1, legend = leg, col = topo.colors(ng, alpha = 1))
+text(x = seq(.5,10, length.out = 9), par("usr")[3] - 0.05, srt = 45, adj = .9, cex = .8, 
+     labels = names, xpd = TRUE)
+```
+
+### Extract beta parameters
+
+The regression coefficients describing the effects of the covariates on each response variable can be extracted using the `getPostEstimate` function. The support values corresponds to the proportion of posterior estimates that are above zero, with values close to 1 indicating strong support for a positive effect, and values close to 0 indicating strong support for a negative effect.
+
+```{r XII,eval=T, cache=T}
+pBeta = getPostEstimate(m, "Beta")
+pBeta
+```
+
+### Extract and plot the Omega matrix 
+The Omega matrices describing residual associations among response variables can be extracted using the `computeAssociations` function.
+
+```{r XIII, eval=T, cache=T, fig.height=5, fig.width=10, fig.cap="\\label{fig: XIII} Residual associations for pollinator visitation to each species after accounting for the effect of temperature on visitation. Associations with at least 75% posterior support are shown"}
+OmegaCor = computeAssociations(m)
+
+par(mfrow = c(1,2))
+plotOrder = 1:m$ns
+supportLevel = 0.75
+
+toPlot = ((OmegaCor[[1]]$support>supportLevel) + 
+            (OmegaCor[[1]]$support<(1-supportLevel))>0)*OmegaCor[[1]]$mean
+corrplot(toPlot[plotOrder,plotOrder], type="lower", tl.cex=.7, tl.col="black",
+         tl.srt=45, method = "color", col=colorRampPalette(c("blue","white","red"))(200),
+         title=expression("Plot level"), cl.cex=.7, mar=c(0,0,1,0))
+
+toPlot = ((OmegaCor[[2]]$support>supportLevel) + 
+            (OmegaCor[[2]]$support<(1-supportLevel))>0)*OmegaCor[[2]]$mean
+corrplot(toPlot[plotOrder,plotOrder], type="lower", tl.cex=.7, tl.col="black",
+         tl.srt=45, method = "color", col=colorRampPalette(c("blue","white","red"))(200),
+         title=expression("Census level"), cl.cex=.7, mar=c(0,0,1,0))
+```
+
+### Construct and plot a gradient for temperature
+
+HMSC-R also comes with tools for constructing gradients illustrating the response of a response variable to covariates. Here, we construct a gradient for temperature, and plot the results for the complete community (the sum of the log number of visits to each species).
+
+```{r XIV, eval=T, cache=T, message=F, warning=F, fig.height=4, fig.width=4, fig.cap="\\label{fig: XIV} Effect of temperature on the total number of pollinator visits to all species (sum of log visits)"}
+Gradient = constructGradient(m, focalVariable = "Temp")
+
+predY = predict(m, Gradient=Gradient,expected=TRUE, predictEtaMean=FALSE)
+
+plotGradient(m, Gradient, predY, measure ="S", showData=F, las=1)
+```
+
+# Model 2: Conspecific flower counts as covariates
+
+Pollinator visitation is likely to depend on the phenotype of the focal species. Here, we assess how the number of flowers in a plot during a census influences the overall number of visits to those flowers. To do so, we now add to the model the number of flowers of the focal species in each plot during each census as a species-specific covariate.
+
+## Model setup and MCMC sampling
+
+### Read data files
+
+```{r XVI, eval=T, cache=T}
+Y = read.csv("model2/Y2.csv")
+XData = read.csv("model2/XData2.csv")
+studyDesign = read.csv("model2/studyDesign2.csv")
+studyDesign$plot = as.factor(studyDesign$plot)
+```
+
+### Define HMSC random levels
+
+```{r XVII, eval=T, cache=T}
+rL1 = HmscRandomLevel(units = unique(studyDesign[,1]))
+rL2 = HmscRandomLevel(units = unique(studyDesign[,2]))
+```
+
+\pagebreak
+
+### Compile a list containing `XData` for each species
+
+In this model the values of the covariate `nflowers` (log number of flowers) are unique for each species. Therefore, instead of providing a single data frame, we provide a list of data frames containing the covariates for each species. 
+
+```{r XVIII, eval=T, cache=T}
+head(XData)
+
+xList = list()
+for(i in 1:ncol(Y)){
+  xList[[i]] = data.frame(Temp=XData$Temp, nflowers=c(XData[i+3]))
+  names(xList[[i]]) = c("Temp","nflowers")
+}
+
+head(xList[[8]],5)
+```
+
+### Set model formula for covariates
+
+```{r XIX, eval=T, cache=T}
+XFormula = ~ nflowers + poly(Temp, degree=2, raw=TRUE)
+```
+
+### Set up the HMSC model
+
+```{r XX, eval=T, cache=T}
+m = Hmsc(Y = as.matrix(log(Y+1)), XData = xList,  XFormula = XFormula,
+         distr="normal", studyDesign = studyDesign, ranLevels = list(plot=rL1,su=rL2))
+```
+
+### Run MCMC and save the model object
+
+```{r XXI, eval=F, cache=T}
+thin = 200
+samples = 1000
+nChains = 2
+adaptNf = ceiling(0.4*samples*thin)
+transient = ceiling(0.5*samples*thin)
+
+a = Sys.time()
+m = sampleMcmc(m, samples = samples, thin = thin,
+               adaptNf = rep(adaptNf, m$nr),
+               transient = transient,
+               nChains = nChains, nParallel = 1)
+Sys.time() - a
+
+save(m, file ="model2/mod2_thin200_samples1000_chains2.RData")
+```
+
+## Evaluating chain convergence and model fit
+
+### Load the model object
+
+```{r XXII, eval=T}
+load("model2/mod2_thin200_samples1000_chains2.RData")
+```
+
+### Compute effective sample sizes and potential scale reduction factors
+
+```{r XXIII, eval=T, cache=T}
+post = convertToCodaObject(m)
+
+esBeta = effectiveSize(post$Beta)
+summary(esBeta)
+
+psrfBeta = gelman.diag(post$Beta)
+summary(psrfBeta$psrf)
+
+esOmega = effectiveSize(post$Omega[[1]])
+summary(esOmega)
+```
+
+### Write posterior trace plots to pdf
+
+```{r XXIV, eval=T, cache=T, message=F, warning=F, results="hide"}
+pdf("model2/posterior_plots/BetaPost.pdf")
+plot(post$Beta)
+dev.off()
+
+pdf("model2/posterior_plots/OmegaPost.pdf")
+plot(post$Omega[[1]])
+plot(post$Omega[[2]])
+dev.off()
+```
+
+## Extract and assess parameter estimates
+
+### Compute predicted values
+
+```{r XXV, eval=T, cache=T}
+predY = computePredictedValues(m)
+```
+
+### Evaluate model fit
+
+```{r XXVI,  eval=T, cache=T}
+MF = evaluateModelFit(m, predY)
+round(MF$R2, 2)
+round(mean(MF$R2), 2)
+```
+
+### Compute and plot variance partitioning
+
+```{r XXVII, eval=T, cache=T, message=F, warning=F, fig.cap="\\label{fig: XXVII} Variance partitioning for each species for Model 2"}
+groups = c(1,1,2,2)
+groupnames = c("Conspecific flowers", "Temperature")
+VP = computeVariancePartitioning(m, groups, groupnames)
+
+names = gsub("_", " ", colnames(m$Y))
+
+outvals = VP$vals
+ng = dim(outvals)[1]
+leg = groupnames
+for (r in 1:m$nr) {leg = c(leg, paste("Random: ", m$rLNames[r], sep = ""))}
+means = round(100 * rowMeans(outvals), 1)
+for (i in 1:ng) {leg[i] = paste(leg[i], " (mean = ", toString(means[i]), ")", sep = "")}
+
+par(mar = c(8,4,2,12), xpd=T)
+barplot(outvals, xlab = "", ylab = "Variance proportion",axisnames=F,
+        args.legend=list(x=19.5,y=1, bty="n", cex=.8), 
+        las = 1, legend = leg, col = topo.colors(ng, alpha = 1))
+text(x = seq(.5,10, length.out = 9), par("usr")[3] - 0.05, srt = 45, adj = .9, cex = .8, 
+     labels = names, xpd = TRUE)
+```
+
+### Extract and plot beta parameters
+
+```{r XXVIII, eval=T, cache=T, fig.height=5, fig.width=5, fig.cap="\\label{fig: XXVIII} Effects of log(conspecific flower abundance) on log(number of visits)"}
+pBeta = getPostEstimate(m, "Beta")
+pBeta
+
+mat = diag(m$ns)
+diag(mat) = pBeta$mean[2,]
+names = gsub("_", " ", colnames(m$Y))
+colnames(mat) = rownames(mat) = names
+corrplot(mat, method="color", col=colorRampPalette(c("blue", "white", "red"))(200),
+         mar=c(5,7,0,2), tl.cex=.7, tl.col="black", tl.pos="n",
+         cl.align.text="r", cl.offset=-.2, addgrid.col = "grey")
+text(x = seq(1,9, length.out = 9), par("usr")[3] - 
+       -2.00, srt = 45, adj = 1, cex = .8, labels = names, xpd = TRUE)
+text(y = seq(1,9, length.out = 9), par("usr")[3] - 
+       -2.00, srt = 0, adj = 1, cex = .8, labels = rev(names), xpd = TRUE)
+```
+
+Credibility intervals for the beta parameters
+
+```{r XXVIIIb, eval=T, cache=T}
+post = convertToCodaObject(m, spNamesNumbers=c(F,T),covNamesNumbers=c(T,F))
+summary(post$Beta)$quantiles[seq(2,34,4),]
+```
+
+### Extract and plot the Omega matrices
+
+```{r XXIX, eval=T, cache=T, fig.height=5, fig.width=10, fig.cap="\\label{fig: XXIX} Residual associations for pollinator visitation to each species after accounting for the effect of temperature and conspecific flower abundances on visitation"}
+OmegaCor = computeAssociations(m)
+
+par(mfrow = c(1,2))
+plotOrder = 1:m$ns
+supportLevel = 0.75
+
+toPlot = ((OmegaCor[[1]]$support>supportLevel) + 
+            (OmegaCor[[1]]$support<(1-supportLevel))>0)*OmegaCor[[1]]$mean
+corrplot(toPlot[plotOrder,plotOrder], type="lower", tl.cex=.7, tl.col="black",
+         tl.srt=45, method = "color", col=colorRampPalette(c("blue","white","red"))(200),
+         title=expression("Plot level"), cl.cex=.7, mar=c(0,0,1,0))
+
+toPlot = ((OmegaCor[[2]]$support>supportLevel) + 
+            (OmegaCor[[2]]$support<(1-supportLevel))>0)*OmegaCor[[2]]$mean
+corrplot(toPlot[plotOrder,plotOrder], type="lower", tl.cex=.7, tl.col="black",
+         tl.srt=45, method = "color", col=colorRampPalette(c("blue","white","red"))(200),
+         title=expression("Census level"), cl.cex=.7, mar=c(0,0,1,0))
+```
+
+### Construct a gradient for conspecific flower number
+
+```{r XXX, eval=T, cache=T, message=F, warning=F, fig.width=4, fig.height=4, fig.cap="\\label{fig: XXX} Effect of log(conspecific flower abundance) on pollinator visitation (sum log visits)"}
+Gradient = constructGradient(m, focalVariable = "nflowers",
+                                non.focalVariables = list(
+                                Temp = list(1),
+                                nflowers = list(1)))
+
+predY = predict(m, Gradient=Gradient, expected=TRUE, predictEtaMean=FALSE)
+
+plotGradient(m, Gradient, predY, measure = "S", showData=F)
+```
+
+```{r XXXI, eval=T, cache=T, fig.height=8, fig.width=8, fig.cap="\\label{fig: XXXI} Effect of conspecific flower abundance on pollinator visitation to each species"}
+par(mfrow=c(3,3))
+for(i in 1:m$ns){
+  plotGradient(m, Gradient, predY, measure = "Y", index = i, showData = F)
+}
+```
+
+# Model 3: Conspecific + heterospecific flower counts as covariates
+
+We will now ask whether and how the number of pollinator visits to a focal species depend on the flower abundances of coflowering species. We include the log (*x*+1)-transformed flower abundances of all species in each plot as covariates.
+
+## Model setup and MCMC sampling
+
+### Read data files
+
+```{r XXXII, eval=T, cache=T}
+rm(list=ls())
+Y = read.csv("model3/Y2.csv")
+XData = read.csv("model3/XData2.csv")
+studyDesign = read.csv("model3/studyDesign2.csv")
+studyDesign$plot = as.factor(studyDesign$plot)
+```
+
+### Define HMSC random levels
+
+```{r XXXIII, eval=T, cache=T}
+rL1 = HmscRandomLevel(units = unique(studyDesign[,1]))
+rL2 = HmscRandomLevel(units = unique(studyDesign[,2]))
+```
+
+### Compile a list containing `XData` for each species
+
+To keep the conspecific flower abundances separate from heterospecific flower abundances, we model the conspecific flower abundances by the covariate `nflowers`, and set the abundance of the focal species to 0 in the `xData` for each focal species. This format allows us (and the HMSC model) to consider similarity among species in the response to conspecific vs. heterospecific flower abundances.
+
+```{r XXXIIIb, eval=T, cache=T}
+xList = list()
+for(i in 1:ncol(Y)){
+  xList[[i]] = data.frame(data.frame(XData[,4:12]), Temp=XData$Temp, nflowers=c(XData[i+3]))
+  xList[[i]][,i] = 0
+  names(xList[[i]])[11] = "nflowers"
+}
+tail(xList[[8]],5)
+```
+
+### Set model formula for covariates
+
+```{r XXXIV, eval=T, cache=T}
+XFormula = as.formula(paste("~",paste(colnames(Y),collapse="+"),
+                          "+nflowers + poly(Temp, degree=2, raw=TRUE)"))
+XFormula
+```
+
+### Set up the HMSC model
+
+```{r XXXV, eval=T, cache=T}
+m = Hmsc(Y=as.matrix(log(Y+1)), XData = xList,  XFormula = XFormula,
+         distr="normal", studyDesign=studyDesign, ranLevels=list(plot=rL1,su=rL2))
+```
+
+### Run MCMC and save the model object
+
+```{r XXXVI, eval=F, cache=T}
+thin = 200
+samples = 1000
+nChains = 2
+adaptNf = ceiling(0.4*samples*thin)
+transient = ceiling(0.5*samples*thin)
+
+a=Sys.time()
+m = sampleMcmc(m, samples = samples, thin = thin,
+               adaptNf = rep(adaptNf,m$nr),
+               transient = transient,
+               nChains = nChains, nParallel = 1)
+Sys.time() - a
+
+save(m, file ="model3/mod3_thin200_samples1000_chains2.RData")
+```
+
+## Evaluating chain convergence and model fit
+
+### Load the model object
+
+```{r XXXVII, eval=T}
+load("model3/mod3_thin200_samples1000_chains2.RData")
+```
+
+### Compute effective sample sizes and potential scale reduction factors
+
+```{r XXXVIII, eval=T, cache=T}
+post = convertToCodaObject(m)
+
+esBeta = effectiveSize(post$Beta)
+summary(esBeta)
+
+psrfBeta = gelman.diag(post$Beta)
+summary(psrfBeta$psrf)
+
+esOmega = effectiveSize(post$Omega[[1]])
+summary(esOmega)
+```
+
+### Write posterior trace plots to pdf
+
+```{r XXXIX, eval=T, cache=T, message=F, warning=F, results="hide"}
+pdf("model3/posterior_plots/BetaPost.pdf")
+plot(post$Beta)
+dev.off()
+
+pdf("model3/posterior_plots/OmegaPost.pdf")
+plot(post$Omega[[1]])
+plot(post$Omega[[2]])
+dev.off()
+```
+
+## Extract and assess parameter estimates
+
+### Compute predicted values
+
+```{r XXXX, eval=T, cache=T}
+predY = computePredictedValues(m)
+```
+
+### Evaluate model fit
+
+```{r XXXXI,  eval=T, cache=T}
+MF = evaluateModelFit(m, predY)
+round(MF$R2, 2)
+round(mean(MF$R2), 2)
+```
+
+### Compute and plot variance partitioning
+
+In this case we are interested in the contributions of conspecific vs. all heterospecific floral abundances on visitation to the focal species. We therefore estimate the variance explained by all non-focal species as a single group.
+
+```{r XXXXII, eval=T, cache=T, warning=F, message=F, fig.cap="\\label{fig: XXXXII} Variance partitioning for each species for Model 3"}
+groups=c(rep(1,10), 2, 3, 3)
+groupnames=c("Heterospecific flowers", "Conspecific flowers", "Temperature")
+VP = computeVariancePartitioning(m, groups, groupnames)
+
+outvals = VP$vals
+ng = dim(outvals)[1]
+leg = groupnames
+m$rLNames = c("Plot", "Census")
+for (r in 1:m$nr) {leg = c(leg, paste("Random: ", m$rLNames[r], sep = ""))}
+means = round(100 * rowMeans(outvals), 1)
+for (i in 1:ng) {leg[i] = paste(leg[i], " (mean = ", toString(means[i]), ")", sep = "")}
+
+plotorder = order(outvals[1,],decreasing=T)
+names= gsub("_", " ", colnames(m$Y))
+
+par(mar = c(8,4,2,12), xpd=T)
+barplot(outvals[,plotorder], xlab = "", ylab = "Variance proportion",
+        args.legend=list(x=19.8,y=1, bty="n", cex=.8), 
+        axisnames=F,
+        las = 1, legend = leg, col = topo.colors(ng, alpha = 1))
+text(x = seq(.5,10, length.out = 9), par("usr")[3] - 0.05, srt = 45, adj = .9, cex = .8, 
+     labels = names[plotorder], xpd = TRUE)
+```
+
+### Extract and plot beta parameters
+
+The effects of conspecific and heterospecific flower abundances on pollinator visitation to each species are described by the beta coefficients. For a quick visual overview, we plot the posterior support of the beta parameters describing the effects of conspecific and heterospecific flower abundances. For visual clarity, we set those parameters with less than 85% posterior support to zero.
+
+```{r XXXXIII, eval=T, cache=T, fig.width=5, fig.height=5, fig.cap="\\label{fig: XXXXIII} Effects of conspecific (diagonal) and heterospecific (off-diagonal) log(flower abundance) on log(number of visits), shown as the posterior support for positive and negative effects. Parameters with at least 85% posterior support are shown"}
+pBeta = getPostEstimate(m, "Beta")
+
+mat = pBeta$mean[2:10,]
+diag(mat) = pBeta$mean[11,]
+
+smat = 2*pBeta$support[2:10,] - 1
+diag(smat) = 2*pBeta$support[11,] - 1
+
+supp = pBeta$support[2:10,]
+diag(supp) = pBeta$support[11,]
+
+supportLevel = .85
+mat = smat * ((supp > supportLevel) + (supp < (1 - supportLevel)) > 0)
+
+names = gsub("_", " ", colnames(m$Y))
+colnames(mat) = rownames(mat) = names
+corrplot(t(mat), method="color", col=colorRampPalette(c("blue", "white", "red"))(200),
+         mar=c(5,7,0,2), tl.cex=.7, tl.col="black", tl.pos="n",
+         cl.align.text="r", cl.offset=-.2, addgrid.col = "grey")
+text(x = seq(1,9, length.out = 9), par("usr")[3] - 
+       -2.00, srt = 45, adj = 1, cex = .8, labels = names, xpd = TRUE)
+text(y = seq(1,9, length.out = 9), par("usr")[3] - 
+       -2.00, srt = 0, adj = 1, cex = .8, labels = rev(names), xpd = TRUE)
+```
+
+\pagebreak
+
+Such plots are useful for visualising many parameters. However, to interpret the results in terms of biology, it is also necessary to look at the parameter estimates. In this model, the beta parameters describe the change in log(visits) per change in log(flowers).
+
+```{r XXXXIIIb, eval=T, cache=T, echo=F}
+mat = pBeta$mean[2:10,]
+diag(mat)=pBeta$mean[11,]
+colnames(mat) = paste0("S",1:9)
+rownames(mat) = paste0(names," (S", 1:9,")")
+kable(round(mat,2),caption="Parameter estimates for the effect of the log(floral abundance) of the species given in rows on the log(pollinator visitation) to the species given in columns")
+```
+
+To assess parameter uncertainty, we can access the 95% credible intervals of each parameter. For example, here are the quantiles for the effect of each species on pollinator visitation to *Clinopodium vulgare* (Species 3). The intra-speficic effect `nflowers` is well supported, while the effects of *Euphrasia stricta*, *Prunella vulgaris* and *Trifolium pratense* are reasonably well supported.
+
+```{r XXXXIIIc, eval=T, cache=T, echo=T}
+post = convertToCodaObject(m, spNamesNumbers=c(F, T), covNamesNumbers=c(T, F))
+round(summary(post$Beta)$quantiles[c(37, 28:29, 31:36),], 3)
+```
+
+### Construct a gradient for effects of *Campanula* flower density
+
+```{r XXXXV, eval=T, cache=T, fig.height=8, fig.width=8, warning=F, message=F, fig.cap="\\label{fig: XXXXV} Effect of *Campanula* flower abundance on pollinator visitation (log visits)"}
+Gradient = constructGradient(m, focalVariable = "Campanula_rotundifolia")
+
+predY = predict(m, Gradient=Gradient, expected=TRUE, predictEtaMean=FALSE)
+
+par(mfrow = c(3,3))
+for(i in 2:m$ns){
+  plotGradient(m, Gradient, predY, measure = "Y", index=i, showData=F)
+}
+```
+
+# Model 4: Visitation rates with conspecific + heterospecific flower counts as covariates
+
+Finally, it may be of interest to know whether the abundance of conspecific and heterospecific flowers affects the number of visits to individual flowers, rather than the total number of visits to all flowers. Thus, we fit a model similar to Model 3, but with the number of visits translated into visitation rates (i.e. number of visits/number of flowers).
+
+## Model setup and MCMC sampling
+
+### Read data files
+
+To translate the number of visits into visitation rates, we simple divide by the number of flowes of each species in each sampling unit. We then log(*x*+1)-transform the flower abundances (covariates).
+
+```{r XXXXVIII, eval=T, cache=T}
+rm(list=ls())
+Y = read.csv("model4/Y3.csv")
+XData = read.csv("model4/XData1.csv")
+studyDesign = read.csv("model4/studyDesign3.csv")
+studyDesign$plot = as.factor(studyDesign$plot)
+
+total_flowers = rowSums(XData[,4:12],na.rm=T)
+total_visits = rowSums(Y,na.rm=T)
+freqs = colSums(XData[,4:12],na.rm=T)/sum(colSums(XData[,4:12],na.rm=T))*100
+
+Y = Y/XData[,4:12]
+XData[,4:12] = apply(XData[,4:12], 2, function(x) log(x+1))
+```
+
+### Define HMSC random levels
+
+```{r XXXXIX, eval=T, cache=T}
+rL1 = HmscRandomLevel(units = unique(studyDesign[,1]))
+rL2 = HmscRandomLevel(units = unique(studyDesign[,2]))
+```
+
+### Compile a list containing `XData` for each species
+
+```{r XXXXIXb, eval=T, cache=T}
+xList = list()
+for(i in 1:ncol(Y)){
+  xList[[i]] = data.frame(data.frame(XData[,4:12]), Temp=XData$Temp, nflowers=c(XData[i+3]))
+  xList[[i]][,i] = 0
+  names(xList[[i]])[11] = "nflowers"
+}
+```
+
+\pagebreak
+
+### Set model formula for covariates
+
+```{r XXXXX, eval=T, cache=T}
+XFormula = as.formula(paste("~",paste(colnames(Y),collapse="+"),
+                      "+ nflowers + poly(Temp, degree=2, raw=TRUE)"))
+XFormula
+```
+
+### Set up the HMSC model
+
+```{r XXXXXI, eval=T, cache=T}
+m = Hmsc(Y=as.matrix(Y), XData = xList,  XFormula = XFormula,
+         distr="normal", studyDesign=studyDesign, ranLevels=list(plot=rL1,su=rL2))
+```
+
+### Run MCMC and save the model object
+
+```{r XXXXXII, eval=F, cache=T}
+thin = 200
+samples = 1000
+nChains = 2
+adaptNf = ceiling(0.4*samples*thin)
+transient = ceiling(0.5*samples*thin)
+
+a = Sys.time()
+m = sampleMcmc(m, samples = samples, thin = thin,
+               adaptNf = rep(adaptNf,m$nr),
+               transient = transient,
+               nChains = nChains, nParallel = 1)
+Sys.time() - a
+
+save(m, file ="model4/mod4_thin200_samples1000_chains2.RData")
+```
+
+## Evaluating chain convergence and model fit
+
+### Load the model object
+
+```{r XXXXXIII, eval=T}
+load("model4/mod4_thin200_samples1000_chains2.RData")
+```
+
+### Compute effective sample sizes and potential scale reduction factors
+
+```{r XXXXXIV, eval=T, cache=T}
+post = convertToCodaObject(m)
+
+esBeta = effectiveSize(post$Beta)
+summary(esBeta)
+
+psrfBeta = gelman.diag(post$Beta)
+summary(psrfBeta$psrf)
+
+esOmega = effectiveSize(post$Omega[[1]])
+summary(esOmega)
+```
+
+### Write posterior trace plots to pdf
+
+```{r XXXXXV, eval=T, cache=T, message=F, warning=F, results="hide"}
+pdf("model4/posterior_plots/BetaPost.pdf")
+plot(post$Beta)
+dev.off()
+
+pdf("model4/posterior_plots/OmegaPost.pdf")
+plot(post$Omega[[1]])
+plot(post$Omega[[2]])
+dev.off()
+```
+
+## Extract and assess parameter estimates
+
+### Compute predicted values
+```{r XXXXXVI, eval=T, cache=T}
+predY = computePredictedValues(m)
+```
+
+### Evaluate model fit
+
+The explanatory power is somewhat lower than for the model of total visit number.
+
+```{r XXXXXVII,  eval=T, cache=T}
+MF = evaluateModelFit(m, predY)
+round(MF$R2, 2)
+round(mean(MF$R2), 2)
+```
+
+### Compute and plot variance partitioning
+
+Less variance is now explained by conspecific flower density, which partly explains the reduced explanatory power.
+
+```{r XXXXXVIII, eval=T, cache=T, warning=F, message=F, fig.cap="\\label{fig: XXXXXVIII} Variance partitioning for each species for Model 4"}
+groups = c(rep(1,10), 2, 3, 3)
+groupnames = c("Heterospecific flowers", "Conspecific flowers","Temperature")
+VP = computeVariancePartitioning(m, groups, groupnames)
+
+outvals = VP$vals
+ng = dim(outvals)[1]
+leg = groupnames
+m$rLNames = c("Plot", "Census")
+for (r in 1:m$nr) {leg = c(leg, paste("Random: ", m$rLNames[r], sep = ""))}
+means = round(100 * rowMeans(outvals), 1)
+for (i in 1:ng) {leg[i] = paste(leg[i], " (mean = ", toString(means[i]), ")", sep = "")}
+
+plotorder = order(outvals[1,],decreasing=T)
+names = gsub("_", " ", colnames(m$Y))
+
+par(mar = c(8,4,2,12), xpd=T)
+barplot(outvals[,plotorder], xlab = "", ylab = "Variance proportion",
+        args.legend=list(x=19.8,y=1, bty="n", cex=.8), 
+        axisnames=F,
+        las = 1, legend = leg, col = topo.colors(ng, alpha = 1))
+text(x = seq(.5,10, length.out = 9), par("usr")[3] - 0.05, srt = 45, adj = .9, cex = .8, 
+     labels = names[plotorder], xpd = TRUE)
+```
+
+\pagebreak
+
+### Extract and plot beta parameters
+
+The main qualitative difference between the models occurs for the intraspecific effects of flower abundance, which are now often weak, and has changed to negative for *Trifolium pratense*. We have also changed the units of the regression coefficients. While in model 3 the betas described the change in the log number of visits per unit change in log number of flowers (roughly an elasticity), in model 4 the betas describe the change in the number of visits per flower per unit change in log number of flowers. For *Trifolium pratense*, this means that larger floral displays are visited more often, but the increase in visitation per flower is limited, so that the number of visits per flower decreases in large displays (intraspecific negative density dependence). For *Campanula rotundifolia* we observe the opposite, i.e. intraspecific positive density dependence.
+
+```{r XXXXXIX, eval=T, cache=T, fig.width=5, fig.height=5, fig.cap="\\label{fig: XXXXXIX} Effects of conspecific (diagonal) and heterospecific (off-diagonal) log(flower abundance) on visitation rates (number of visits per flower), shown as the posterior support for positive and negative effects. Parameters with at least 85% posterior support are shown"}
+pBeta = getPostEstimate(m, "Beta")
+
+mat = pBeta$mean[2:10,]
+diag(mat) = pBeta$mean[11,]
+
+smat = 2*pBeta$support[2:10,] - 1
+diag(smat) = 2*pBeta$support[11,] - 1
+
+supp = pBeta$support[2:10,]
+diag(supp) = pBeta$support[11,]
+
+supportLevel = .85
+mat = smat * ((supp > supportLevel) + (supp < (1 - supportLevel)) > 0)
+
+names = gsub("_", " ", colnames(m$Y))
+colnames(mat) = rownames(mat) = names
+corrplot(t(mat), method="color", col=colorRampPalette(c("blue", "white", "red"))(200),
+         mar=c(5,7,0,2), tl.cex=.7, tl.col="black", tl.pos="n",
+         cl.align.text="r", cl.offset=-.2, addgrid.col = "grey")
+text(x = seq(1,9, length.out = 9), par("usr")[3] - 
+       -2.00, srt = 45, adj = 1, cex = .8, labels = names, xpd = TRUE)
+text(y = seq(1,9, length.out = 9), par("usr")[3] - 
+       -2.00, srt = 0, adj = 1, cex = .8, labels = rev(names), xpd = TRUE)
+```
+
+To further understand the difference between the two models, and thus the consequences of translating the number of visits into visitation rates, we plot the estimated beta parameters from the two models.
+
+The estimates tend to fall in the same quadrant, indicating similar sign in both models. The change in sign for *Trifolium pratense* is visible in the upper left quadrant.
+
+```{r XXXXXX, eval=T, cache=T, fig.height=4, fig.width=4, fig.cap="\\label{fig: XXXXXX} Comparison of regression coefficients for effects of conspecific (black) and heterospecific (grey) flower abundances estimated from Model 3 and 4"}
+load("model3/mod3_thin200_samples1000_chains2.RData")
+mod3_mat = getPostEstimate(m, "Beta")$mean[2:10,]
+diag(mod3_mat) = getPostEstimate(m, "Beta")$mean[11,]
+
+load("model4/mod4_thin200_samples1000_chains2.RData")
+mod4_mat = getPostEstimate(m, "Beta")$mean[2:10,]
+diag(mod4_mat) = getPostEstimate(m, "Beta")$mean[11,]
+
+diag_mod3 = diag(mod3_mat)
+diag_mod4 = diag(mod4_mat)
+diag(mod3_mat) = NA
+diag(mod4_mat) = NA
+
+plot(mod4_mat,mod3_mat,col="grey",pch=16,ylim=c(-.5,.9),xlim=c(-.5,.9),las=1,
+     xlab="Beta Model 4 (visits per flower per log flower)",
+     ylab="Beta Model 3 (log visits per log flower)")
+points(diag_mod4,diag_mod3,col="black",pch=16)
+abline(h=0, lty=2)
+abline(v=0, lty=2)
+legend("bottomright", pch=c(16,16), col=c("black","grey"),
+       legend=c("Conspecific","Heterospecific"), cex=.8)
+```
+
+\pagebreak
+
+Comparing the betas from the two models, ~80% have the same sign in both models.
+
+```{r XXXXXXb, eval=T, cache=T}
+t = (mod3_mat>0 & mod4_mat>0 | mod3_mat<0 & mod4_mat<0)
+round(sum(t,na.rm=T)/(sum(t>-1,na.rm=T))*100, 2)
+f = (mod3_mat<0 & mod4_mat>0 | mod3_mat>0 & mod4_mat<0)
+round(sum(f,na.rm=T)/(sum(f>-1,na.rm=T))*100, 2)
+```
+
+The estimates for the interspecific effects are strongly correlated.
+
+```{r XXXXXXI, eval=T, cache=T}
+cor(c(mod3_mat),c(mod4_mat),"pairwise")
+cor(diag_mod3,diag_mod4,"pairwise")
+```
+
