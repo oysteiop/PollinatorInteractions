@@ -3,7 +3,7 @@ title:  |
   | Using hierarchical joint models to study reproductive interactions in plant communities:  
   | Individual-level fitness data
 author: "Øystein H. Opedal & Stein Joar Hegland"
-date: "30 April 2019"
+date: "9 May 2019"
 output: pdf_document
 ---
 
