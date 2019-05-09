@@ -3,7 +3,7 @@ title:  |
   | Using hierarchical joint models to detect reproductive interactions in plant communities: 
   | Plot-level visitation data
 author: "Øystein H. Opedal & Stein Joar Hegland"
-date: "30 April 2019"
+date: "9 May 2019"
 output: pdf_document
 ---
 
@@ -180,7 +180,7 @@ text(x = seq(.5,10, length.out = 9), par("usr")[3] - 0.05, srt = 45, adj = .9, c
 
 ### Extract beta parameters
 
-The regression coefficients describing the effects of the covariates on each response variable can be extracted using the `getPostEstimate` function. The support values corresponds to the proportion of posterior estimates that are above zero, with values close to 1 indicating strong support for a positive effect, and values close to 0 indicating strong support for a negative effect.
+The regression coefficients describing the effects of the covariates on each response variable can be extracted using the `getPostEstimate` function. The support values corresponds to the proportion of posterior estimates that are above zero, with values close to 1 indicating strong support for a positive effect. The supportNeg values corresponds to the proportion of posterior estimates that are below zero, with values close to 1 indicating strong support for a negative effect.
 
 ```{r XII,eval=T, cache=T}
 pBeta = getPostEstimate(m, "Beta")
@@ -199,12 +199,14 @@ supportLevel = 0.75
 
 toPlot = ((OmegaCor[[1]]$support>supportLevel) + 
             (OmegaCor[[1]]$support<(1-supportLevel))>0)*OmegaCor[[1]]$mean
+rownames(toPlot)=colnames(toPlot)=gsub("_"," ",rownames(toPlot))
 corrplot(toPlot[plotOrder,plotOrder], type="lower", tl.cex=.7, tl.col="black",
          tl.srt=45, method = "color", col=colorRampPalette(c("blue","white","red"))(200),
          title=expression("Plot level"), cl.cex=.7, mar=c(0,0,1,0))
 
 toPlot = ((OmegaCor[[2]]$support>supportLevel) + 
             (OmegaCor[[2]]$support<(1-supportLevel))>0)*OmegaCor[[2]]$mean
+rownames(toPlot)=colnames(toPlot)=gsub("_"," ",rownames(toPlot))
 corrplot(toPlot[plotOrder,plotOrder], type="lower", tl.cex=.7, tl.col="black",
          tl.srt=45, method = "color", col=colorRampPalette(c("blue","white","red"))(200),
          title=expression("Census level"), cl.cex=.7, mar=c(0,0,1,0))
@@ -214,7 +216,7 @@ corrplot(toPlot[plotOrder,plotOrder], type="lower", tl.cex=.7, tl.col="black",
 
 HMSC-R also comes with tools for constructing gradients illustrating the response of a response variable to covariates. Here, we construct a gradient for temperature, and plot the results for the complete community (the sum of the log number of visits to each species).
 
-```{r XIV, eval=T, cache=T, message=F, warning=F, fig.height=4, fig.width=4, fig.cap="\\label{fig: XIV} Effect of temperature on the total number of pollinator visits to all species (sum of log visits)"}
+```{r XIV, eval=T, cache=T, message=F, warning=F, results=F,fig.height=4, fig.width=4, fig.cap="\\label{fig: XIV} Effect of temperature on the total number of pollinator visits to all species (sum of log visits)"}
 Gradient = constructGradient(m, focalVariable = "Temp")
 
 predY = predict(m, Gradient=Gradient,expected=TRUE, predictEtaMean=FALSE)
@@ -374,15 +376,16 @@ text(x = seq(.5,10, length.out = 9), par("usr")[3] - 0.05, srt = 45, adj = .9, c
 
 ```{r XXVIII, eval=T, cache=T, fig.height=5, fig.width=5, fig.cap="\\label{fig: XXVIII} Effects of log(conspecific flower abundance) on log(number of visits)"}
 pBeta = getPostEstimate(m, "Beta")
-pBeta
+pBeta$mean
 
 mat = diag(m$ns)
 diag(mat) = pBeta$mean[2,]
 names = gsub("_", " ", colnames(m$Y))
 colnames(mat) = rownames(mat) = names
+par(xpd=T)
 corrplot(mat, method="color", col=colorRampPalette(c("blue", "white", "red"))(200),
          mar=c(5,7,0,2), tl.cex=.7, tl.col="black", tl.pos="n",
-         cl.align.text="r", cl.offset=-.2, addgrid.col = "grey")
+         cl.align.text="r", cl.offset=-.45, addgrid.col = "grey")
 text(x = seq(1,9, length.out = 9), par("usr")[3] - 
        -2.00, srt = 45, adj = 1, cex = .8, labels = names, xpd = TRUE)
 text(y = seq(1,9, length.out = 9), par("usr")[3] - 
@@ -407,12 +410,14 @@ supportLevel = 0.75
 
 toPlot = ((OmegaCor[[1]]$support>supportLevel) + 
             (OmegaCor[[1]]$support<(1-supportLevel))>0)*OmegaCor[[1]]$mean
+rownames(toPlot)=colnames(toPlot)=gsub("_"," ",rownames(toPlot))
 corrplot(toPlot[plotOrder,plotOrder], type="lower", tl.cex=.7, tl.col="black",
          tl.srt=45, method = "color", col=colorRampPalette(c("blue","white","red"))(200),
          title=expression("Plot level"), cl.cex=.7, mar=c(0,0,1,0))
 
 toPlot = ((OmegaCor[[2]]$support>supportLevel) + 
             (OmegaCor[[2]]$support<(1-supportLevel))>0)*OmegaCor[[2]]$mean
+rownames(toPlot)=colnames(toPlot)=gsub("_"," ",rownames(toPlot))
 corrplot(toPlot[plotOrder,plotOrder], type="lower", tl.cex=.7, tl.col="black",
          tl.srt=45, method = "color", col=colorRampPalette(c("blue","white","red"))(200),
          title=expression("Census level"), cl.cex=.7, mar=c(0,0,1,0))
@@ -420,7 +425,7 @@ corrplot(toPlot[plotOrder,plotOrder], type="lower", tl.cex=.7, tl.col="black",
 
 ### Construct a gradient for conspecific flower number
 
-```{r XXX, eval=T, cache=T, message=F, warning=F, fig.width=4, fig.height=4, fig.cap="\\label{fig: XXX} Effect of log(conspecific flower abundance) on pollinator visitation (sum log visits)"}
+```{r XXX, eval=T, cache=T, message=F, warning=F, results=F, fig.width=4, fig.height=4, fig.cap="\\label{fig: XXX} Effect of log(conspecific flower abundance) on pollinator visitation (sum log visits)"}
 Gradient = constructGradient(m, focalVariable = "nflowers",
                                 non.focalVariables = list(
                                 Temp = list(1),
@@ -431,7 +436,7 @@ predY = predict(m, Gradient=Gradient, expected=TRUE, predictEtaMean=FALSE)
 plotGradient(m, Gradient, predY, measure = "S", showData=F)
 ```
 
-```{r XXXI, eval=T, cache=T, fig.height=8, fig.width=8, fig.cap="\\label{fig: XXXI} Effect of conspecific flower abundance on pollinator visitation to each species"}
+```{r XXXI, eval=T, cache=T, results=F, fig.height=8, fig.width=8, fig.cap="\\label{fig: XXXI} Effect of conspecific flower abundance on pollinator visitation to each species"}
 par(mfrow=c(3,3))
 for(i in 1:m$ns){
   plotGradient(m, Gradient, predY, measure = "Y", index = i, showData = F)
@@ -581,9 +586,9 @@ for (i in 1:ng) {leg[i] = paste(leg[i], " (mean = ", toString(means[i]), ")", se
 plotorder = order(outvals[1,],decreasing=T)
 names= gsub("_", " ", colnames(m$Y))
 
-par(mar = c(8,4,2,12), xpd=T)
+par(mar = c(8,4,2,13), xpd=T)
 barplot(outvals[,plotorder], xlab = "", ylab = "Variance proportion",
-        args.legend=list(x=19.8,y=1, bty="n", cex=.8), 
+        args.legend=list(x=20.4,y=1, bty="n", cex=.8), 
         axisnames=F,
         las = 1, legend = leg, col = topo.colors(ng, alpha = 1))
 text(x = seq(.5,10, length.out = 9), par("usr")[3] - 0.05, srt = 45, adj = .9, cex = .8, 
@@ -611,9 +616,10 @@ mat = smat * ((supp > supportLevel) + (supp < (1 - supportLevel)) > 0)
 
 names = gsub("_", " ", colnames(m$Y))
 colnames(mat) = rownames(mat) = names
+par(xpd=T)
 corrplot(t(mat), method="color", col=colorRampPalette(c("blue", "white", "red"))(200),
          mar=c(5,7,0,2), tl.cex=.7, tl.col="black", tl.pos="n",
-         cl.align.text="r", cl.offset=-.2, addgrid.col = "grey")
+         cl.align.text="r", cl.offset=-.45, addgrid.col = "grey")
 text(x = seq(1,9, length.out = 9), par("usr")[3] - 
        -2.00, srt = 45, adj = 1, cex = .8, labels = names, xpd = TRUE)
 text(y = seq(1,9, length.out = 9), par("usr")[3] - 
@@ -641,7 +647,7 @@ round(summary(post$Beta)$quantiles[c(37, 28:29, 31:36),], 3)
 
 ### Construct a gradient for effects of *Campanula* flower density
 
-```{r XXXXV, eval=T, cache=T, fig.height=8, fig.width=8, warning=F, message=F, fig.cap="\\label{fig: XXXXV} Effect of *Campanula* flower abundance on pollinator visitation (log visits)"}
+```{r XXXXV, eval=T, cache=T, results=F, fig.height=8, fig.width=8, warning=F, message=F, fig.cap="\\label{fig: XXXXV} Effect of *Campanula* flower abundance on pollinator visitation (log visits)"}
 Gradient = constructGradient(m, focalVariable = "Campanula_rotundifolia")
 
 predY = predict(m, Gradient=Gradient, expected=TRUE, predictEtaMean=FALSE)
@@ -836,9 +842,10 @@ mat = smat * ((supp > supportLevel) + (supp < (1 - supportLevel)) > 0)
 
 names = gsub("_", " ", colnames(m$Y))
 colnames(mat) = rownames(mat) = names
+par(xpd=T)
 corrplot(t(mat), method="color", col=colorRampPalette(c("blue", "white", "red"))(200),
          mar=c(5,7,0,2), tl.cex=.7, tl.col="black", tl.pos="n",
-         cl.align.text="r", cl.offset=-.2, addgrid.col = "grey")
+         cl.align.text="r", cl.offset=-.45, addgrid.col = "grey")
 text(x = seq(1,9, length.out = 9), par("usr")[3] - 
        -2.00, srt = 45, adj = 1, cex = .8, labels = names, xpd = TRUE)
 text(y = seq(1,9, length.out = 9), par("usr")[3] - 
