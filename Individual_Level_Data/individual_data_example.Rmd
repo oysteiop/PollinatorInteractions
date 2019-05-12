@@ -233,5 +233,5 @@ toPlot = ((OmegaCor[[1]]$support>supportLevel) +
             (OmegaCor[[1]]$support<(1-supportLevel))>0)*OmegaCor[[1]]$mean
 
 corrplot(toPlot, type="lower", tl.cex=.7,tl.col="black",tl.srt=45,method = "color", 
-         col=colorRampPalette(c("blue","white", "red"))(200), mar=c(0,0,0,1)) 
+         col=colorRampPalette(c("blue3","white", "red3"))(200), mar=c(0,0,0,1)) 
 ```
