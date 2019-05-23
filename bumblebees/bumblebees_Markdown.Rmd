@@ -3,7 +3,7 @@ title:  |
   | Using hierarchical joint models to detect reproductive interactions in plant communities: 
   | Plot-level visitation data
 author: "Øystein H. Opedal & Stein Joar Hegland"
-date: "9 May 2019"
+date: "23 May 2019"
 output: pdf_document
 ---
 
@@ -384,8 +384,8 @@ names = gsub("_", " ", colnames(m$Y))
 colnames(mat) = rownames(mat) = names
 par(xpd=T)
 corrplot(mat, method="color", col=colorRampPalette(c("blue3", "white", "red3"))(200),
-         mar=c(5,7,0,2), tl.cex=.7, tl.col="black", tl.pos="n",
-         cl.align.text="r", cl.offset=-.45, addgrid.col = "grey")
+         mar=c(5,7,0,2), tl.cex=.7, cl.lim=c(0,.8), tl.col="black", tl.pos="n",
+         cl.align.text="r", cl.offset=-.45, cl.length=9, addgrid.col = "grey")
 text(x = seq(1,9, length.out = 9), par("usr")[3] - 
        -2.00, srt = 45, adj = 1, cex = .8, labels = names, xpd = TRUE)
 text(y = seq(1,9, length.out = 9), par("usr")[3] - 
