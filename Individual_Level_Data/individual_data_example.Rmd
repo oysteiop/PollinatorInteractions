@@ -1,9 +1,9 @@
 ---
 title:  |   
-  | Using hierarchical joint models to study reproductive interactions in plant communities:  
+  | Using hierarchical joint models to detect reproductive interactions in plant communities:  
   | Individual-level fitness data
-author: "Ã˜ystein H. Opedal & Stein Joar Hegland"
-date: "9 May 2019"
+author: "Øystein H. Opedal & Stein Joar Hegland"
+date: "4 September 2019"
 output: pdf_document
 ---
 
@@ -15,18 +15,19 @@ library(corrplot)
 library(knitr)
 ```
 
-Contact: oystein.opedal@helsinki.fi
+Contact: Øystein H. Opedal (oystein.opedal@helsinki.fi, ohopedal@gmail.com)  
+Webpage: oysteinopedal.wordpress.com
 
-# 1. Introduction
+# Introduction
 Here, we demonstrate how to set up a HMSC analysis of fitness data (e.g. seed set) for 5 species cooccurring on 50 plots. Two traits (z~1~ and z~2~) are measured for each individual plant. We will use these data to estimate residual fitness correlations among species, i.e. how the fitness of each species in each plot affects the fitness of other species when growing in those plots.
 
 Furthermore, we will use the trait and fitness data to jointly estimate phenotypic selection gradients for the two traits in each species using the method of Lande and Arnold 1983 (Evolution).
 
 For technical details about the HMSC model, see Ovaskainen et al. 2017 (Ecology Letters) and Tikhonov et al. 2019 (bioRxiv).
 
-# 2. Preparing data
+##Preparing data
 
-## Load the study design file
+### Load the study design file
 
 The file `SimulatedStudyDesign.csv` includes trait measurements for 5 species occurring on 50 plots, and an indicator of which species each row corresponds to. There is more than one individual of each species in some plots.
 
@@ -34,11 +35,11 @@ The file `SimulatedStudyDesign.csv` includes trait measurements for 5 species oc
 library(Hmsc)
 library(corrplot)
 
-alldat = read.csv("SimulatedStudyDesign.csv")
+alldat = read.csv("C:/data/HMSC_poll_inter/SimulatedStudyDesign.csv")
 head(alldat)
 ```
 
-## Prepare the trait data
+### Prepare the trait data
 
 Trait data and other covariates are provided as a dataframe (`XData`), and a formula describing the regression equation (`XFormula`). The formula follows standard `R` syntax. HMSC does not currently allow missing values in `XData`, hence individuals with missing values must be excluded, or the missing values replaced with means or other gap-filling techniques.
 
@@ -49,7 +50,7 @@ head(XData)
 XFormula = ~ z1 + z2
 ```
 
-## Prepare the `studyDesign` dataframe
+### Prepare the studyDesign dataframe
 
 The study design is provided as a dataframe containing factors indicating the hierarchical structure of the data. Here, individuals belong to one of the 50 plots. Additional random effects can be included by adding columns to the `studyDesign` dataframe.
 
@@ -59,10 +60,10 @@ studyDesign$plot = as.factor(studyDesign$plot)
 head(studyDesign)
 ```
 
-## Generate fitness data
+### Generate fitness data
 We simulate fitness data for each individual as a function of their traits z~1~ and z~2~. We let the fitness of Species 1 in each plot affect the fitness of Species 2 and 3 in that plot positively, and the fitness of Species 4 and 5 in that plot negatively.
 
-Note that each line in the **Y** matrix correspond to one individual of one species, and all other species are set to NA.
+Note that each line in the Y matrix correspond to one individual of one species, and all other species are set to NA.
 
 ```{r II}
 Y = alldat[,4:8]
@@ -89,7 +90,7 @@ apply(Y, 2, range, na.rm=T)
 Y[c(1:5, 363:367),]
 ```
 
-## Convert fitness values to relative fitness
+### Convert fitness values to relative fitness
 
 To estimate selection gradients, we divide the fitness values by the mean fitness for each species.
 
@@ -97,17 +98,17 @@ To estimate selection gradients, we divide the fitness values by the mean fitnes
 Y = apply(Y, 2, function(x) x/mean(x, na.rm=T))
 ```
 
-# 3. Setup the HMSC model
+## Setup the HMSC model
 
-## Define a HMSC random level for plots
+### Define a HMSC random level for plots
 
-A plot-level random effect will allow us to assess residual correlations among species' fitness values in a given plot. Multiple random levels can be set up. For spatially explicit data, the argument `units` is replaced by providing a matrix of x and y coordinates with the argument `sData`. 
+A plot-level random effect will allow us to assess residual correlations among species' fitness values in a given plot. Multiple random levels can be set up. For spatially explicit data, the argument `units` is replaced by providing a matrix of X and Y coordinates with the argument `sData`. 
 
 ```{r III}
 rL1 = HmscRandomLevel(units = unique(studyDesign$plot))
 ```
 
-## Setup the HMSC model
+### Setup the HMSC model
 
 At this stage we also set the error distribution of the analyses, here "normal" for Gaussian errors.
 
@@ -116,9 +117,9 @@ m = Hmsc(Y=as.matrix(Y), XData = XData,  XFormula = XFormula,
          dist = "normal", studyDesign = studyDesign, ranLevels = list(plot=rL1))
 ```
 
-# 4. Sample the posterior distribution
+## Sample the posterior distribution
 
-As with all MCMC-based Bayesian analyses, the posterior needs to be sampled until convergence. A good strategy is to start with a small number of iterations, and then increase the number of iterations until the results converge. We run 2 replicate MCMC chains to assess whether these converge. 
+As with all MCMC-based Bayesian analyses, the posterior needs to be sampled until convergence. A good strategy is to start with a low number of iterations, and then increase the number of iterations until the results converge. We run 2 replicate MCMC chains to assess whether these converge. 
 
 ```{r V, cache=T}
 samples = 1000
@@ -127,38 +128,36 @@ adaptNf = .4*(samples*thin)
 transient = .5*(samples*thin)
 nChains = 2
 
-start = Sys.time()
-m = sampleMcmc(m, samples = samples, thin = thin, transient = transient, 
-             verbose = F, adaptNf = rep(adaptNf, m$nr), nChains = nChains)
+start=Sys.time()
+m = sampleMcmc(m, samples = samples, thin=thin, transient = transient, 
+             verbose=F, adaptNf=rep(adaptNf, m$nr), nChains = nChains)
 Sys.time()-start
 ```
 
-# 5. Assessing model convergence
+## Assessing model convergence
 
 To assess chain convergence, we can look at posterior trace plots, effective sample sizes, and potential scale reduction factors. In this case, all of these indicate convergence of the sampling, because there is no trend in the posterior trace plots, the two chains overlap, the effective sample sizes are close to the number of samples, and the potential scale reduction factors are close to 1.
 
-## Extract posterior and convert to `Coda` object
+### Extract posterior and convert to Coda object
 
 ```{r VI, cache=F, fig.height=6, fig.width=6, fig.cap="\\label{fig: VI} Posterior trace plot of the first three beta parameters"}
 post = convertToCodaObject(m)  
 plot(post$Beta[,1:3])
 ```
 
-## Effective sample size for beta parameters
+### Effective sample size for beta parameters
 
 ```{r VII, cache=F}
 summary(effectiveSize(post$Beta))
 ```
 
-\pagebreak
-
-## Potential scale reduction factors for beta parameters
+### Potential scale reduction factors for beta parameters
 
 ```{r VIII, cache=F}
 summary(gelman.diag(post$Beta)$psrf)
 ```
 
-# 5. Evaluate model fit
+## Evaluate model fit
 
 HMSC comes with tools for computing measures of model fit for each species
 
@@ -168,36 +167,30 @@ MF = evaluateModelFit(m, predY)
 MF
 ```
 
-# 6. Assessing parameter estimates
+### Compute and plot variance partitioning
 
-## Compute and plot variance partitioning
+HMSC also comes with tools for performing variance component analyses and plotting the results. Because we have many *NA*'s in the **Y** matrix, we use the `na.ignore = TRUE` option to compute the variances and covariances of the traits only for those sites where the species is present.
 
-HMSC also comes with tools for performing variance component analyses and plotting the results. Because we have many `NA`'s in the **Y** matrix, we use the `na.ignore = TRUE` option to compute the variances and covariances of the traits only for those sites where the species is present.
-  
 ```{r X, cache=F, message=F, warning=F, fig.width=8, fig.cap="\\label{fig: X} Variance partitioning for each species"}
 group = c(1, 1, 2)
 groupnames = m$covNames[-1]
-VP = computeVariancePartitioning(m, group = group, groupnames = groupnames, na.ignore = TRUE)
+VP = computeVariancePartitioning(m, group = group, groupnames = groupnames, na.ignore=T)
 par(mar=c(4,4,2,12), xpd=T)
-plotVariancePartitioning(m, VP = VP, args.legend=list(x=9.3, y=1, bty="n"))
+plotVariancePartitioning(m, VP = VP, args.legend=list(x=9.2, y=1, bty="n"))
 ```
 
-\pagebreak
+### Extract and beta parameters
 
-## Extract and plot beta parameters
+The regression coefficients for the fixed part of the HMSC model can be extracted with the `getPostEstimate` function.
 
-The regression coefficients for the fixed part of the HMSC model can be extracted with the `getPostEstimate` function and visualised with the `plotBeta` function.
-
-```{r XI, cache=F, fig.height=4, fig.width=6, fig.cap="\\label{fig: XI} Heatmap of beta parameters (raw selection gradients)"}
+```{r XI, cache=F, fig.height=4, fig.width=4, fig.cap="\\label{fig: XI} Heatmap of beta parameters (raw selection gradients)"}
 mbeta = getPostEstimate(m, "Beta")
 mbeta
-par(mar = c(0,0,0,0))
-plotBeta(m, post = mbeta, "Mean", covOrder = "Vector", covVector = c(2:3), supportLevel=0)
 ```
 
-## Extract selection gradients
+### Compute selection gradients
 
-To compare the strength of selection across traits and species, selection gradients are typically standardized either by trait means or standard deviations. Mean-standardization yields a measure of proportional change in fitness per proportional change in the trait (i.e. an elasticity), while SD-standardization yields a measure of proportional change in fitness per standard deviation change in the trait (sometimes called selection intensity or *i*). 
+To compare the strength of selection across traits and species, selection gradients are typically standardized either by trait means or standard deviations. Mean-standardization yields a measure of proportional change in fitness per proportional chnage in the trait (i.e. an elasticity), while SD-standardization yields a measure of proportional change in fitness per standard deviation change in the trait (sometimes called selection intensity or *i*). 
 
 ```{r XII, cache=F, echo=F}
 z1Means = colMeans(XData$z1*as.matrix(alldat[,4:8]),na.rm=T)
@@ -208,18 +201,16 @@ z2SD = apply(XData$z2*as.matrix(alldat[,4:8]), 2, sd, na.rm=T)
 betamyz1 = mbeta$mean[2,]*z1Means
 betamyz2 = mbeta$mean[3,]*z2Means
 betavarz1 = mbeta$mean[2,]*z1SD
-betavarz2 = mbeta$mean[3,]*z2SD
+betavarz2=mbeta$mean[3,]*z2SD
 
 sumstats = matrix(NA,nrow=10, ncol=6)
-sumstats[,1] = rep(c("Mean", "SD", "Beta", "Beta_mean", "Beta_var"),2)
-sumstats[,2:6] = round(rbind(z1Means,z1SD,mbeta$mean[2,],betamyz1, betavarz1, 
+sumstats[,1]=rep(c("Mean", "SD", "Beta", "Beta_mean", "Beta_var"),2)
+sumstats[,2:6]=round(rbind(z1Means,z1SD,mbeta$mean[2,],betamyz1, betavarz1, 
                            z2Means, z2SD, mbeta$mean[3,], betamyz2,betavarz2),2)
-rownames(sumstats) = c("z1",rep("",4),"z2",rep("",4))
-colnames(sumstats) = c("",paste("Species",1:5))
+rownames(sumstats)=c("z1",rep("",4),"z2",rep("",4))
+colnames(sumstats)=c("",paste("Species",1:5))
 kable(sumstats, caption="Means, standard deviations, and selection gradients for each species")
 ```
-
-\pagebreak
 
 ## Compute and plot species associations
 
@@ -233,5 +224,5 @@ toPlot = ((OmegaCor[[1]]$support>supportLevel) +
             (OmegaCor[[1]]$support<(1-supportLevel))>0)*OmegaCor[[1]]$mean
 
 corrplot(toPlot, type="lower", tl.cex=.7,tl.col="black",tl.srt=45,method = "color", 
-         col=colorRampPalette(c("blue3","white", "red3"))(200), mar=c(0,0,0,1)) 
+         col=colorRampPalette(c("blue","white", "red"))(200), mar=c(0,0,0,1)) 
 ```
