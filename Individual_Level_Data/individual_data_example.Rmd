@@ -1,9 +1,9 @@
 ---
 title:  |   
-  | Using hierarchical joint models to detect reproductive interactions in plant communities:  
+  | Using hierarchical joint models to study reproductive interactions in plant communities:  
   | Individual-level fitness data
 author: "Øystein H. Opedal & Stein Joar Hegland"
-date: "4 September 2019"
+date: "13 September 2019"
 output: pdf_document
 ---
 
