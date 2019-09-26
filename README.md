@@ -1,7 +1,7 @@
 # PollinatorInteractions
 Using hierarchical joint models to study reproductive interactions in plant communities
 
-https://zenodo.org/badge/latestdoi/184192167
+[![DOI](https://zenodo.org/badge/184192167.svg)](https://zenodo.org/badge/latestdoi/184192167)
 
 This repository includes the data and R code demonstrating the methods for studying pollinator-mediated reproductive interactions among coflowering plants demonstrated in Opedal & Hegland 2019 Journal of Ecology (in press).
 
