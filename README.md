@@ -1,7 +1,7 @@
 # PollinatorInteractions
 Using hierarchical joint models to study reproductive interactions in plant communities
 
-This repository includes the data and R code demonstrating the methods for studying pollinator-mediated reproductive interactions among coflowering plants demonstrated in Opedal & Hegland 2019 (in review).
+This repository includes the data and R code demonstrating the methods for studying pollinator-mediated reproductive interactions among coflowering plants demonstrated in Opedal & Hegland 2019 Journal of Ecology (in press).
 
 The 'bumblebees' folder contains analyses of data on bumblebee visitation to nine coflowering species in a meadow in Norway, see Hegland et al. 2009. The relative importance of positive and negative interactions for pollinator attraction in a plant community. Ecological Research 24: 929-936.
 
